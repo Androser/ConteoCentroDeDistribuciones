@@ -43,7 +43,7 @@ export async function importProducts(sessionId, products) {
   return getProducts(sessionId)
 }
 
-export async function addScan(sessionId, sku, delta, userName) {
+export async function addScan(sessionId, sku, delta, userName, userAvatar = '') {
   const { data: product, error: findError } = await supabase
     .from('products')
     .select('*')
@@ -67,13 +67,14 @@ export async function addScan(sessionId, sku, delta, userName) {
     sku,
     delta,
     user_name: userName,
+    user_avatar: userAvatar,
   })
   if (scanError) throw scanError
 
   return { ...product, conteo: newConteo }
 }
 
-export async function createQuickProduct(sessionId, product, userName) {
+export async function createQuickProduct(sessionId, product, userName, userAvatar = '') {
   const { data, error } = await supabase
     .from('products')
     .insert({ ...product, session_id: sessionId, conteo: 1 })
@@ -86,6 +87,7 @@ export async function createQuickProduct(sessionId, product, userName) {
     sku: data.sku,
     delta: 1,
     user_name: userName,
+    user_avatar: userAvatar,
   })
   return data
 }
@@ -128,15 +130,22 @@ export async function getRecentScans(sessionId, limit = 10) {
 export async function getSessionRanking(sessionId) {
   const { data, error } = await supabase
     .from('scans')
-    .select('user_name, delta')
+    .select('user_name, user_avatar, delta, created_at')
     .eq('session_id', sessionId)
   if (error) throw error
   const ranking = {}
   for (const scan of data) {
-    ranking[scan.user_name] = (ranking[scan.user_name] || 0) + scan.delta
+    if (!ranking[scan.user_name]) {
+      ranking[scan.user_name] = { total: 0, user_avatar: scan.user_avatar, latest: scan.created_at }
+    }
+    ranking[scan.user_name].total += scan.delta
+    if (scan.created_at > ranking[scan.user_name].latest) {
+      ranking[scan.user_name].latest = scan.created_at
+      if (scan.user_avatar) ranking[scan.user_name].user_avatar = scan.user_avatar
+    }
   }
   return Object.entries(ranking)
-    .map(([user_name, total]) => ({ user_name, total }))
+    .map(([user_name, info]) => ({ user_name, total: info.total, user_avatar: info.user_avatar }))
     .sort((a, b) => b.total - a.total)
 }
 

@@ -5,6 +5,7 @@ import { ArrowLeft, Upload, Download, Minus, Plus, X, Wifi, WifiOff, List, Undo2
 import Scanner from '../components/Scanner'
 import ActivityFeed from '../components/ActivityFeed'
 import SessionRanking from '../components/SessionRanking'
+import AchievementToast from '../components/AchievementToast'
 import { exportInventory, parseInventoryFile } from '../lib/excel'
 import { demoProducts } from '../lib/demoProducts'
 import { playBeep, playSuccess } from '../lib/sound'
@@ -44,6 +45,10 @@ export default function Session() {
   const [scanAnimation, setScanAnimation] = useState(false)
   const [showCheck, setShowCheck] = useState(false)
   const [editingProductId, setEditingProductId] = useState(null)
+  const [achievement, setAchievement] = useState(null)
+  const [streak, setStreak] = useState(0)
+  const [personalBest, setPersonalBest] = useState(0)
+  const wasLeaderRef = useRef(false)
 
   const refreshProducts = useCallback(async () => {
     const data = await getProducts(sessionId)
@@ -54,7 +59,13 @@ export default function Session() {
   const refreshRanking = useCallback(async () => {
     const data = await getSessionRanking(sessionId)
     setRanking(data)
-  }, [sessionId])
+    // Detectar pérdida de liderazgo
+    if (wasLeaderRef.current && data.length > 0 && data[0].user_name !== userName) {
+      showAchievement('lost_lead', `${data[0].user_name} ahora lidera`)
+    }
+    wasLeaderRef.current = data.length > 0 && data[0].user_name === userName
+    return data
+  }, [sessionId, userName])
 
   useEffect(() => {
     getSetting('userName').then((name) => setUserName(name || 'Anónimo'))
@@ -105,6 +116,38 @@ export default function Session() {
     setTimeout(() => setShowCheck(false), 600)
   }
 
+  function showAchievement(type, message) {
+    setAchievement({ type, message })
+  }
+
+  function checkAchievements(newTotal, newStreak, newRanking) {
+    // Primer escaneo de la sesión
+    if (newTotal === 1) {
+      showAchievement('first_scan', 'Eres el primero en contar')
+      return
+    }
+    // Racha de 10 productos seguidos
+    if (newStreak === 10) {
+      showAchievement('streak_10', '10 productos seguidos sin parar')
+      return
+    }
+    // Récord personal
+    if (newTotal > personalBest && personalBest > 0) {
+      showAchievement('personal_record', `Superaste tu récord de ${personalBest}`)
+      setPersonalBest(newTotal)
+      return
+    }
+    if (newTotal > personalBest) setPersonalBest(newTotal)
+
+    // Liderazgo
+    const myRank = newRanking.findIndex((r) => r.user_name === userName)
+    const isLeader = myRank === 0 && newRanking.length > 1
+    if (isLeader && !wasLeaderRef.current) {
+      showAchievement('top_scanner', 'Ahora lideras el ranking')
+    }
+    wasLeaderRef.current = isLeader
+  }
+
   async function handleImport(e) {
     const file = e.target.files?.[0]
     if (!file) return
@@ -140,19 +183,24 @@ export default function Session() {
     triggerScanFeedback()
 
     try {
-      const updated = await addScan(sessionId, sku, 1, userName)
+      const updated = await addScan(sessionId, sku, 1, userName, userAvatar)
       if (!updated) {
         setUnknownSku(sku)
         return
       }
       setLastProduct(updated)
-      await refreshProducts()
-      await refreshRanking()
+      const newStreak = streak + 1
+      setStreak(newStreak)
+      const newProducts = await refreshProducts()
+      const newRanking = await getSessionRanking(sessionId)
+      setRanking(newRanking)
+      const myTotal = newRanking.find((r) => r.user_name === userName)?.total || 0
+      checkAchievements(myTotal, newStreak, newRanking)
     } catch (err) {
       setError('Error al escanear: ' + err.message)
       await refreshProducts()
     }
-  }, [sessionId, userName, products, refreshProducts, refreshRanking])
+  }, [sessionId, userName, userAvatar, products, refreshProducts, streak, personalBest])
 
   async function handleAdjust(delta) {
     if (!lastProduct) return
@@ -163,7 +211,7 @@ export default function Session() {
     if (delta > 0) playBeep()
 
     try {
-      const updated = await addScan(sessionId, lastProduct.sku, delta, userName)
+      const updated = await addScan(sessionId, lastProduct.sku, delta, userName, userAvatar)
       if (updated) {
         setLastProduct(updated)
         await refreshProducts()
@@ -189,7 +237,7 @@ export default function Session() {
     setProducts(products.map((p) => (p.sku === lastProduct.sku ? optimistic : p)))
 
     try {
-      const updated = await addScan(sessionId, lastProduct.sku, delta, userName)
+      const updated = await addScan(sessionId, lastProduct.sku, delta, userName, userAvatar)
       if (updated) {
         setLastProduct(updated)
         await refreshProducts()
@@ -217,7 +265,7 @@ export default function Session() {
 
   async function handleEditProduct(product, delta) {
     try {
-      const updated = await addScan(sessionId, product.sku, delta, userName)
+      const updated = await addScan(sessionId, product.sku, delta, userName, userAvatar)
       if (updated) {
         if (lastProduct?.sku === product.sku) setLastProduct(updated)
         await refreshProducts()
@@ -241,7 +289,7 @@ export default function Session() {
       warehouse: form.get('warehouse') || session?.warehouse || 'BODEGA-BOGOTA',
     }
     try {
-      const created = await createQuickProduct(sessionId, product, userName)
+      const created = await createQuickProduct(sessionId, product, userName, userAvatar)
       setLastProduct(created)
       setUnknownSku(null)
       await refreshProducts()
@@ -504,6 +552,8 @@ export default function Session() {
           </form>
         </div>
       )}
+
+      <AchievementToast achievement={achievement} onClose={() => setAchievement(null)} />
     </div>
   )
 }

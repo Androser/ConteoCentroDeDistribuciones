@@ -17,12 +17,16 @@ export default function SessionRanking({ ranking, currentUser }) {
             } transition-all`}
           >
             <span className="text-lg w-6 text-center">{MEDALS[index] || `${index + 1}°`}</span>
-            <span
-              className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold"
-              style={{ backgroundColor: getUserColor(user.user_name) }}
-            >
-              {user.user_name.charAt(0).toUpperCase()}
-            </span>
+            {user.user_avatar ? (
+              <img src={user.user_avatar} alt={user.user_name} className="w-7 h-7 rounded-full" />
+            ) : (
+              <span
+                className="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                style={{ backgroundColor: getUserColor(user.user_name) }}
+              >
+                {user.user_name.charAt(0).toUpperCase()}
+              </span>
+            )}
             <span className="flex-1 text-sm font-medium text-gray-800 truncate">
               {user.user_name}
               {user.user_name === currentUser && <span className="text-amber-600 text-xs ml-1">(tú)</span>}
