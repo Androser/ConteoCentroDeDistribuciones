@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, QrCode, Upload, User, History, X } from 'lucide-react'
+import { Plus, QrCode, Upload, User, History, X, ScanLine } from 'lucide-react'
 import { createSession } from '../lib/session'
 import { getSetting, setSetting, getRecentSessions, removeRecentSession } from '../lib/db'
+import QRJoinModal from '../components/QRJoinModal'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -12,6 +13,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [recentSessions, setRecentSessions] = useState([])
+  const [showQRScanner, setShowQRScanner] = useState(false)
 
   useEffect(() => {
     getSetting('userName').then((name) => {
@@ -52,6 +54,17 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleQRJoin(sessionId) {
+    if (!userName.trim()) {
+      setShowQRScanner(false)
+      setError('Escribe tu nombre antes de escanear')
+      return
+    }
+    await setSetting('userName', userName.trim())
+    setShowQRScanner(false)
+    navigate(`/session/${sessionId}`)
   }
 
   async function handleRemoveRecent(e, sessionId) {
@@ -139,23 +152,35 @@ export default function Home() {
 
         <div className="border-t border-gray-200 my-5" />
 
-        <label className="block mb-3">
+        <div className="mb-3">
           <span className="text-sm font-medium text-gray-700 mb-1 block">Unirse a una sesión</span>
+          <button
+            onClick={() => setShowQRScanner(true)}
+            className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-semibold py-3 px-4 rounded-xl transition mb-3"
+          >
+            <ScanLine size={20} />
+            Escanear QR de Sesión
+          </button>
+          <div className="flex items-center gap-2 my-3">
+            <div className="flex-1 border-t border-gray-300" />
+            <span className="text-xs text-gray-400">o pega el código</span>
+            <div className="flex-1 border-t border-gray-300" />
+          </div>
           <input
             type="text"
             value={joinId}
             onChange={(e) => setJoinId(e.target.value)}
-            placeholder="Pega el código de sesión"
+            placeholder="Código de sesión o URL"
             className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-green-500"
           />
-        </label>
+        </div>
         <button
           onClick={handleJoin}
           disabled={loading}
-          className="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-semibold py-3 px-4 rounded-xl transition"
+          className="w-full flex items-center justify-center gap-2 bg-gray-200 hover:bg-gray-300 disabled:bg-gray-100 text-gray-800 font-semibold py-3 px-4 rounded-xl transition"
         >
           <QrCode size={20} />
-          Unirse a Sesión
+          Unirse con Código
         </button>
 
         <p className="text-xs text-gray-400 text-center mt-6">
@@ -163,6 +188,10 @@ export default function Home() {
           El Excel se importa dentro de cada sesión
         </p>
       </div>
+
+      {showQRScanner && (
+        <QRJoinModal onJoin={handleQRJoin} onClose={() => setShowQRScanner(false)} />
+      )}
     </div>
   )
 }
