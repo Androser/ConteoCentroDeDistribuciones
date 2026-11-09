@@ -101,3 +101,65 @@ export function subscribeToSession(sessionId, onProductsChange) {
     .subscribe()
   return () => supabase.removeChannel(channel)
 }
+
+export function subscribeToScans(sessionId, onNewScan) {
+  const channel = supabase
+    .channel(`scans:${sessionId}`)
+    .on(
+      'postgres_changes',
+      { event: 'INSERT', schema: 'public', table: 'scans', filter: `session_id=eq.${sessionId}` },
+      (payload) => onNewScan(payload.new),
+    )
+    .subscribe()
+  return () => supabase.removeChannel(channel)
+}
+
+export async function getRecentScans(sessionId, limit = 10) {
+  const { data, error } = await supabase
+    .from('scans')
+    .select('*')
+    .eq('session_id', sessionId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data
+}
+
+export async function getSessionRanking(sessionId) {
+  const { data, error } = await supabase
+    .from('scans')
+    .select('user_name, delta')
+    .eq('session_id', sessionId)
+  if (error) throw error
+  const ranking = {}
+  for (const scan of data) {
+    ranking[scan.user_name] = (ranking[scan.user_name] || 0) + scan.delta
+  }
+  return Object.entries(ranking)
+    .map(([user_name, total]) => ({ user_name, total }))
+    .sort((a, b) => b.total - a.total)
+}
+
+export async function undoLastScan(sessionId, userName) {
+  const { data: lastScan, error } = await supabase
+    .from('scans')
+    .select('*')
+    .eq('session_id', sessionId)
+    .eq('user_name', userName)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .single()
+  if (error || !lastScan) return null
+
+  const { data: product } = await supabase
+    .from('products')
+    .select('*')
+    .eq('id', lastScan.product_id)
+    .single()
+  if (!product) return null
+
+  const newConteo = Math.max(0, (product.conteo || 0) - lastScan.delta)
+  await supabase.from('products').update({ conteo: newConteo }).eq('id', product.id)
+  await supabase.from('scans').delete().eq('id', lastScan.id)
+  return { ...product, conteo: newConteo }
+}

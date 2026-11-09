@@ -4,6 +4,7 @@ import { Plus, QrCode, Upload, User, History, X, ScanLine } from 'lucide-react'
 import { createSession } from '../lib/session'
 import { getSetting, setSetting, getRecentSessions, removeRecentSession } from '../lib/db'
 import QRJoinModal from '../components/QRJoinModal'
+import JoinSessionModal from '../components/JoinSessionModal'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -14,6 +15,7 @@ export default function Home() {
   const [error, setError] = useState('')
   const [recentSessions, setRecentSessions] = useState([])
   const [showQRScanner, setShowQRScanner] = useState(false)
+  const [joiningSessionId, setJoiningSessionId] = useState(null)
 
   useEffect(() => {
     getSetting('userName').then((name) => {
@@ -39,32 +41,21 @@ export default function Home() {
   }
 
   async function handleJoin() {
-    if (!userName.trim()) return setError('Escribe tu nombre')
     if (!joinId.trim()) return setError('Pega el código de la sesión')
-    setLoading(true)
-    setError('')
-    try {
-      await setSetting('userName', userName.trim())
-      let sessionId = joinId.trim()
-      const urlMatch = sessionId.match(/\/session\/([a-f0-9-]+)/i)
-      if (urlMatch) sessionId = urlMatch[1]
-      navigate(`/session/${sessionId}`)
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
-    }
+    let sessionId = joinId.trim()
+    const urlMatch = sessionId.match(/\/session\/([a-f0-9-]+)/i)
+    if (urlMatch) sessionId = urlMatch[1]
+    setJoiningSessionId(sessionId)
   }
 
   async function handleQRJoin(sessionId) {
-    if (!userName.trim()) {
-      setShowQRScanner(false)
-      setError('Escribe tu nombre antes de escanear')
-      return
-    }
-    await setSetting('userName', userName.trim())
     setShowQRScanner(false)
-    navigate(`/session/${sessionId}`)
+    setJoiningSessionId(sessionId)
+  }
+
+  function handleCompleteJoin(name, avatar) {
+    setJoiningSessionId(null)
+    navigate(`/session/${joiningSessionId}`)
   }
 
   async function handleRemoveRecent(e, sessionId) {
@@ -108,7 +99,7 @@ export default function Home() {
               {recentSessions.map((s) => (
                 <div
                   key={s.id}
-                  onClick={() => navigate(`/session/${s.id}`)}
+                  onClick={() => setJoiningSessionId(s.id)}
                   className="flex items-center justify-between bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer transition"
                 >
                   <div className="flex-1 min-w-0">
@@ -191,6 +182,14 @@ export default function Home() {
 
       {showQRScanner && (
         <QRJoinModal onJoin={handleQRJoin} onClose={() => setShowQRScanner(false)} />
+      )}
+
+      {joiningSessionId && (
+        <JoinSessionModal
+          sessionId={joiningSessionId}
+          onJoin={handleCompleteJoin}
+          onClose={() => setJoiningSessionId(null)}
+        />
       )}
     </div>
   )
