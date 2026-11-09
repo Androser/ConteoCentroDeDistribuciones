@@ -22,6 +22,8 @@ import {
   undoLastScan,
 } from '../lib/session'
 import { getSetting, saveRecentSession } from '../lib/db'
+import { isMariaPaz, mariaTheme } from '../lib/specialMode'
+import FloatingHearts from '../components/FloatingHearts'
 
 export default function Session() {
   const { sessionId } = useParams()
@@ -320,12 +322,18 @@ export default function Session() {
     )
   }
 
+  const specialMode = isMariaPaz(userName)
+
   return (
-    <div className="h-screen flex flex-col bg-gray-100 overflow-hidden">
+    <div
+      className="h-screen flex flex-col overflow-hidden relative"
+      style={specialMode ? { background: mariaTheme.background } : { backgroundColor: '#f3f4f6' }}
+    >
+      {specialMode && <FloatingHearts />}
       <ActivityFeed activities={activities} />
 
       {/* Header */}
-      <div className="bg-white shadow-sm px-2 py-2 flex items-center justify-between shrink-0">
+      <div className={`shadow-sm px-2 py-2 flex items-center justify-between shrink-0 relative z-10 ${specialMode ? 'bg-yellow-50' : 'bg-white'}`}>
         <button onClick={() => navigate('/')} className="p-1.5 text-gray-600">
           <ArrowLeft size={22} />
         </button>
@@ -553,7 +561,7 @@ export default function Session() {
         </div>
       )}
 
-      <AchievementToast achievement={achievement} onClose={() => setAchievement(null)} />
+      <AchievementToast achievement={achievement} onClose={() => setAchievement(null)} userName={userName} />
     </div>
   )
 }

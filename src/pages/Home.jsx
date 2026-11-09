@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, QrCode, Upload, User, History, X, ScanLine } from 'lucide-react'
+import { Plus, QrCode, Upload, User, History, X, ScanLine, Heart } from 'lucide-react'
 import { createSession } from '../lib/session'
 import { getSetting, setSetting, getRecentSessions, removeRecentSession } from '../lib/db'
 import QRJoinModal from '../components/QRJoinModal'
 import JoinSessionModal from '../components/JoinSessionModal'
+import FloatingHearts from '../components/FloatingHearts'
+import { isMariaPaz, mariaMessages, mariaTheme } from '../lib/specialMode'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -16,6 +18,7 @@ export default function Home() {
   const [recentSessions, setRecentSessions] = useState([])
   const [showQRScanner, setShowQRScanner] = useState(false)
   const [joiningSessionId, setJoiningSessionId] = useState(null)
+  const specialMode = isMariaPaz(userName)
 
   useEffect(() => {
     getSetting('userName').then((name) => {
@@ -70,23 +73,45 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-lg p-6 max-w-md w-full">
-        <h1 className="text-2xl font-bold text-gray-800 text-center mb-1">Inventario CD</h1>
+    <div
+      className="min-h-screen flex flex-col items-center justify-center p-4 relative"
+      style={specialMode ? { background: mariaTheme.background } : { backgroundColor: '#f3f4f6' }}
+    >
+      {specialMode && <FloatingHearts />}
+
+      <div className={`bg-white rounded-2xl shadow-lg p-6 max-w-md w-full relative z-10 ${specialMode ? 'animate-golden-glow' : ''}`}>
+        {specialMode && (
+          <div className="text-center mb-4 animate-fade-in">
+            <img
+              src="/maria-paz.jpg"
+              alt="Maria Paz"
+              className="w-24 h-24 rounded-full mx-auto mb-2 border-4 border-yellow-400 shadow-lg object-cover"
+            />
+            <p className="text-lg font-bold text-yellow-600 flex items-center justify-center gap-1">
+              {mariaMessages.welcome}
+            </p>
+          </div>
+        )}
+
+        <h1 className={`text-2xl font-bold text-center mb-1 ${specialMode ? 'text-yellow-600' : 'text-gray-800'}`}>
+          Inventario CD {specialMode && '❤️'}
+        </h1>
         <p className="text-gray-500 text-center mb-6">Centro de Distribución - Bogotá</p>
 
         {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-4 text-sm">{error}</div>}
 
         <label className="block mb-4">
-          <span className="text-sm font-medium text-gray-700 flex items-center gap-1 mb-1">
-            <User size={16} /> Tu nombre
+          <span className={`text-sm font-medium flex items-center gap-1 mb-1 ${specialMode ? 'text-yellow-600' : 'text-gray-700'}`}>
+            {specialMode ? <Heart size={16} className="text-red-500" /> : <User size={16} />} Tu nombre
           </span>
           <input
             type="text"
             value={userName}
             onChange={(e) => setUserName(e.target.value)}
-            placeholder="Ej. María"
-            className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder={specialMode ? 'Mi amor ❤️' : 'Ej. María'}
+            className={`w-full border rounded-xl px-4 py-3 focus:outline-none focus:ring-2 ${
+              specialMode ? 'border-yellow-400 focus:ring-yellow-400 bg-yellow-50' : 'border-gray-300 focus:ring-blue-500'
+            }`}
           />
         </label>
 
