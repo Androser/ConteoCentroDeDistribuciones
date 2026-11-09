@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, QrCode, Upload, User } from 'lucide-react'
+import { Plus, QrCode, Upload, User, History, X } from 'lucide-react'
 import { createSession } from '../lib/session'
-import { getSetting, setSetting } from '../lib/db'
+import { getSetting, setSetting, getRecentSessions, removeRecentSession } from '../lib/db'
 
 export default function Home() {
   const navigate = useNavigate()
@@ -11,11 +11,13 @@ export default function Home() {
   const [joinId, setJoinId] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [recentSessions, setRecentSessions] = useState([])
 
   useEffect(() => {
     getSetting('userName').then((name) => {
       if (name) setUserName(name)
     })
+    getRecentSessions().then(setRecentSessions)
   }, [])
 
   async function handleCreate() {
@@ -41,7 +43,6 @@ export default function Home() {
     setError('')
     try {
       await setSetting('userName', userName.trim())
-      // Aceptar tanto el ID de sesión como la URL completa
       let sessionId = joinId.trim()
       const urlMatch = sessionId.match(/\/session\/([a-f0-9-]+)/i)
       if (urlMatch) sessionId = urlMatch[1]
@@ -51,6 +52,17 @@ export default function Home() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleRemoveRecent(e, sessionId) {
+    e.stopPropagation()
+    await removeRecentSession(sessionId)
+    setRecentSessions(await getRecentSessions())
+  }
+
+  function formatDate(iso) {
+    const d = new Date(iso)
+    return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })
   }
 
   return (
@@ -73,6 +85,36 @@ export default function Home() {
             className="w-full border border-gray-300 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
         </label>
+
+        {recentSessions.length > 0 && (
+          <div className="mb-5">
+            <div className="flex items-center gap-1 text-sm font-medium text-gray-700 mb-2">
+              <History size={16} /> Conteos recientes
+            </div>
+            <div className="space-y-2">
+              {recentSessions.map((s) => (
+                <div
+                  key={s.id}
+                  onClick={() => navigate(`/session/${s.id}`)}
+                  className="flex items-center justify-between bg-gray-50 hover:bg-blue-50 border border-gray-200 rounded-xl px-4 py-3 cursor-pointer transition"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-800 truncate">{s.name}</p>
+                    <p className="text-xs text-gray-500">{formatDate(s.visited_at)}</p>
+                  </div>
+                  <button
+                    onClick={(e) => handleRemoveRecent(e, s.id)}
+                    className="ml-2 text-gray-400 hover:text-red-500 p-1"
+                    aria-label="Quitar de recientes"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 my-5" />
+          </div>
+        )}
 
         <div className="border-t border-gray-200 my-5" />
 

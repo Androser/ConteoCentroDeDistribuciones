@@ -12,7 +12,7 @@ import {
   importProducts,
   subscribeToSession,
 } from '../lib/session'
-import { getSetting } from '../lib/db'
+import { getSetting, saveRecentSession } from '../lib/db'
 
 export default function Session() {
   const { sessionId } = useParams()
@@ -40,6 +40,7 @@ export default function Session() {
       .then(([s, p]) => {
         setSession(s)
         setProducts(p)
+        saveRecentSession(s)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoading(false))
