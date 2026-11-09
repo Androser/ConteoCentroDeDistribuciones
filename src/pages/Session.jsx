@@ -162,8 +162,8 @@ export default function Session() {
 
       {showQR && (
         <div className="bg-white p-4 flex flex-col items-center border-b">
-          <QRCodeSVG value={sessionId} size={160} />
-          <p className="text-xs text-gray-500 mt-2 break-all">{sessionId}</p>
+          <QRCodeSVG value={`${window.location.origin}/session/${sessionId}`} size={160} />
+          <p className="text-xs text-gray-500 mt-2 break-all">{`${window.location.origin}/session/${sessionId}`}</p>
         </div>
       )}
 

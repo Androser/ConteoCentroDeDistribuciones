@@ -41,7 +41,11 @@ export default function Home() {
     setError('')
     try {
       await setSetting('userName', userName.trim())
-      navigate(`/session/${joinId.trim()}`)
+      // Aceptar tanto el ID de sesión como la URL completa
+      let sessionId = joinId.trim()
+      const urlMatch = sessionId.match(/\/session\/([a-f0-9-]+)/i)
+      if (urlMatch) sessionId = urlMatch[1]
+      navigate(`/session/${sessionId}`)
     } catch (err) {
       setError(err.message)
     } finally {
