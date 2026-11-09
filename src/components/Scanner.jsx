@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { readBarcodesFromImageData } from 'zxing-wasm'
-import { Zap, Hand } from 'lucide-react'
+import { Zap, Hand, Camera, CameraOff } from 'lucide-react'
+
+const INACTIVITY_TIMEOUT = 30000
 
 function extractSku(code) {
-  // EAN-13: 040 + 9 dígitos SKU + verificador
   if (/^\d{13}$/.test(code) && code.startsWith('040')) {
     return code.slice(3, 12)
   }
-  // UPC-A: 40 + 9 dígitos SKU + verificador
   if (/^\d{12}$/.test(code) && code.startsWith('40')) {
     return code.slice(2, 11)
   }
@@ -19,6 +19,7 @@ export default function Scanner({ onScan }) {
   const [holding, setHolding] = useState(false)
   const [flash, setFlash] = useState(null)
   const [cameraError, setCameraError] = useState('')
+  const [cameraActive, setCameraActive] = useState(true)
   const videoRef = useRef(null)
   const canvasRef = useRef(null)
   const onScanRef = useRef(onScan)
@@ -26,7 +27,9 @@ export default function Scanner({ onScan }) {
   const holdingRef = useRef(holding)
   const lastCountedSkuRef = useRef('')
   const absenceTimerRef = useRef(null)
+  const inactivityTimerRef = useRef(null)
   const scanningRef = useRef(false)
+  const streamRef = useRef(null)
 
   useEffect(() => {
     onScanRef.current = onScan
@@ -38,30 +41,57 @@ export default function Scanner({ onScan }) {
 
   useEffect(() => {
     holdingRef.current = holding
-    // En modo precisión, soltar el botón permite contar de nuevo el mismo SKU
     if (!holding && mode === 'precision') {
       lastCountedSkuRef.current = ''
     }
   }, [holding, mode])
 
+  function resetInactivityTimer() {
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
+    inactivityTimerRef.current = setTimeout(() => {
+      stopCamera()
+    }, INACTIVITY_TIMEOUT)
+  }
+
+  function stopCamera() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop())
+      streamRef.current = null
+    }
+    if (videoRef.current) videoRef.current.srcObject = null
+    setCameraActive(false)
+    if (inactivityTimerRef.current) {
+      clearTimeout(inactivityTimerRef.current)
+      inactivityTimerRef.current = null
+    }
+  }
+
+  function activateCamera() {
+    setCameraActive(true)
+    setCameraError('')
+  }
+
   useEffect(() => {
-    let stream
+    if (!cameraActive) return
+
     let animationId
     let cancelled = false
 
     async function startCamera() {
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
+        const stream = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } },
         })
         if (cancelled) {
           stream.getTracks().forEach((t) => t.stop())
           return
         }
+        streamRef.current = stream
         if (videoRef.current) {
           videoRef.current.srcObject = stream
           await videoRef.current.play()
         }
+        resetInactivityTimer()
       } catch (err) {
         if (!cancelled) setCameraError('No se pudo acceder a la cámara: ' + err.message)
         return
@@ -100,13 +130,13 @@ export default function Scanner({ onScan }) {
             const rawCode = results[0].text
             const sku = extractSku(rawCode)
 
-            // Reiniciar temporizador de ausencia: el código sigue en vista
+            resetInactivityTimer()
+
             if (absenceTimerRef.current) {
               clearTimeout(absenceTimerRef.current)
               absenceTimerRef.current = null
             }
 
-            // Solo contar si es un SKU distinto al último contado
             if (sku !== lastCountedSkuRef.current) {
               lastCountedSkuRef.current = sku
               setFlash('green')
@@ -116,7 +146,6 @@ export default function Scanner({ onScan }) {
               if (modeRef.current === 'precision') setHolding(false)
             }
           } else if (!cancelled) {
-            // Sin código en este frame: si pasa 1.5s sin detectar, permitir recontar el mismo SKU
             if (!absenceTimerRef.current) {
               absenceTimerRef.current = setTimeout(() => {
                 lastCountedSkuRef.current = ''
@@ -142,53 +171,74 @@ export default function Scanner({ onScan }) {
       cancelled = true
       cancelAnimationFrame(animationId)
       if (absenceTimerRef.current) clearTimeout(absenceTimerRef.current)
-      if (stream) stream.getTracks().forEach((t) => t.stop())
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current)
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop())
+        streamRef.current = null
+      }
     }
-  }, [])
+  }, [cameraActive])
 
   return (
-    <div className="relative bg-black" style={{ height: '40vh' }}>
+    <div className="relative bg-black" style={{ height: '30vh', minHeight: '180px' }}>
       <video ref={videoRef} className="w-full h-full object-cover" playsInline muted />
       <canvas ref={canvasRef} className="hidden" />
 
-      {cameraError ? (
+      {!cameraActive && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white bg-gray-900">
+          <CameraOff size={40} className="mb-2 text-gray-400" />
+          <p className="text-sm text-gray-400 mb-3">Cámara en reposo</p>
+          <button
+            onClick={activateCamera}
+            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-xl"
+          >
+            <Camera size={18} /> Activar cámara
+          </button>
+        </div>
+      )}
+
+      {cameraActive && cameraError && (
         <div className="absolute inset-0 flex items-center justify-center text-white text-center p-4">
           {cameraError}
         </div>
-      ) : (
+      )}
+
+      {cameraActive && !cameraError && (
         <div
-          className={`absolute inset-4 border-4 rounded-2xl pointer-events-none transition-colors duration-150 ${
+          className={`absolute inset-3 border-4 rounded-2xl pointer-events-none transition-colors duration-150 ${
             flash === 'green' ? 'border-green-400' : 'border-red-500'
           }`}
         />
       )}
 
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 flex bg-gray-900/80 rounded-full p-1 z-10">
-        <button
-          onClick={() => setMode('burst')}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ${
-            mode === 'burst' ? 'bg-blue-600 text-white' : 'text-gray-300'
-          }`}
-        >
-          <Zap size={14} /> Ráfaga
-        </button>
-        <button
-          onClick={() => setMode('precision')}
-          className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-medium ${
-            mode === 'precision' ? 'bg-blue-600 text-white' : 'text-gray-300'
-          }`}
-        >
-          <Hand size={14} /> Precisión
-        </button>
-      </div>
+      {cameraActive && (
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 flex bg-gray-900/80 rounded-full p-1 z-10">
+          <button
+            onClick={() => setMode('burst')}
+            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+              mode === 'burst' ? 'bg-blue-600 text-white' : 'text-gray-300'
+            }`}
+          >
+            <Zap size={14} /> Ráfaga
+          </button>
+          <button
+            onClick={() => setMode('precision')}
+            className={`flex items-center gap-1 px-3 py-1 rounded-full text-xs font-medium ${
+              mode === 'precision' ? 'bg-blue-600 text-white' : 'text-gray-300'
+            }`}
+          >
+            <Hand size={14} /> Precisión
+          </button>
+        </div>
+      )}
 
-      {mode === 'precision' && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+      {cameraActive && mode === 'precision' && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-10">
           <button
             onPointerDown={() => setHolding(true)}
             onPointerUp={() => setHolding(false)}
             onPointerLeave={() => setHolding(false)}
-            className={`w-20 h-20 rounded-full border-4 border-white shadow-lg transition ${
+            className={`w-16 h-16 rounded-full border-4 border-white shadow-lg transition ${
               holding ? 'bg-red-700 scale-95' : 'bg-red-600'
             }`}
             aria-label="Mantener para escanear"
